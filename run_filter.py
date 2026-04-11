@@ -14,7 +14,7 @@ ALL_DAILY = '/tmp/all_daily.json'
 SKIP_DATE = '20260223'
 TOLERANCE = 0.98
 MIN_VOL_LOTS = 1000
-FETCH_DAYS = 170  # enough for weekly MA20 (~22 weeks) + 60-day daily MA
+FETCH_DAYS = 220  # ~31 weeks, matches local behavior and handles late-2025 IPOs
 
 os.makedirs(CACHE_DIR, exist_ok=True)
 
