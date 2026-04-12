@@ -19,7 +19,7 @@ jobs:
           python-version: '3.12'
       - name: Run filter and push LINE
         env:
-          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_BULLISH_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python3 run_filter.py
       # NOTE: AI analysis (institutional ranking + news + recommendations)
