@@ -424,14 +424,12 @@ def main():
     # Send diff notification if there are changes
     if prev_top is not None and prev_date != today_str:
         added, removed = compute_diff(prev_top, top)
-        if added or removed:
-            diff_msg = format_diff_message(added, removed, today_str, prev_date)
-            print('\n--- Diff message ---')
-            print(diff_msg)
-            status2, body2 = send_line(diff_msg, token, uid)
-            print(f'\nLINE push #2 (diff) status={status2} body={body2[:150]}')
-        else:
-            print('\nNo changes vs ' + prev_date + ', skip diff notification')
+        added, removed = compute_diff(prev_top, top)
+        diff_msg = format_diff_message(added, removed, today_str, prev_date)
+        print('\n--- Diff message ---')
+        print(diff_msg)
+        status2, body2 = send_line(diff_msg, token, uid)
+        print(f'\nLINE push #2 (diff) status={status2} body={body2[:150]}')
     else:
         print('\nNo previous snapshot or same date, skip diff notification')
 
