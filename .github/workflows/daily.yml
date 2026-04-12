@@ -22,11 +22,9 @@ jobs:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python3 run_filter.py
-      - name: Run institutional ranking analysis
-        env:
-          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python3 analyze_top.py
+      # NOTE: AI analysis (institutional ranking + news + recommendations)
+      # is now handled by local Claude Code skill on Windows Task Scheduler.
+      # This GitHub Actions workflow serves as a fallback for basic push only.
       - name: Commit history snapshot
         run: |
           git config user.name "github-actions[bot]"
