@@ -11,12 +11,15 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 CACHE_DIR = '/tmp/bulk_cache'
 ALL_DAILY = '/tmp/all_daily.json'
+HISTORY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history')
+LATEST_TOP = HISTORY_DIR + '/latest.json'
 SKIP_DATE = '20260223'
 TOLERANCE = 0.98
 MIN_VOL_LOTS = 1000
 FETCH_DAYS = 220  # ~31 weeks, matches local behavior and handles late-2025 IPOs
 
 os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(HISTORY_DIR, exist_ok=True)
 
 def tick_size(price):
     if price < 10: return 0.01
@@ -299,6 +302,50 @@ def pick_top_of_top(qualified, n=15):
            if s['surge_ratio'] >= 3.0 and s['min20'] >= 1.0 and s['min60'] >= 1.05]
     return top[:n]
 
+def save_history(top, date_str):
+    snapshot = {
+        'date': date_str,
+        'top': [{'code': s['code'], 'name': s['name'],
+                 'surge_ratio': round(s['surge_ratio'], 2),
+                 'last_close': round(s['last_close'], 2)} for s in top]
+    }
+    with open(LATEST_TOP, 'w', encoding='utf-8') as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    return snapshot
+
+def load_previous():
+    if not os.path.exists(LATEST_TOP):
+        return None
+    try:
+        with open(LATEST_TOP, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def compute_diff(prev_top, today_top):
+    prev_codes = {s['code']: s for s in prev_top} if prev_top else {}
+    today_codes = {s['code']: s for s in today_top}
+    added = [today_codes[c] for c in today_codes if c not in prev_codes]
+    removed = [prev_codes[c] for c in prev_codes if c not in today_codes]
+    return added, removed
+
+def format_diff_message(added, removed, today_str, prev_date):
+    lines = ['\U0001f514 台股強中之強異動 ' + today_str, '']
+    lines.append('（對照上次：' + prev_date + '）')
+    lines.append('')
+    if added:
+        lines.append('➕ 新入選 ' + str(len(added)) + ' 檔：')
+        for s in added:
+            lines.append(f"  {s['code']} {s['name']}  量比 {s['surge_ratio']:.2f}x")
+    if removed:
+        lines.append('')
+        lines.append('➖ 移出 ' + str(len(removed)) + ' 檔：')
+        for s in removed:
+            lines.append(f"  {s['code']} {s['name']}  (前 {s['surge_ratio']:.2f}x)")
+    if not added and not removed:
+        lines.append('✅ 名單無異動')
+    return '\n'.join(lines)
+
 def send_line(text, token, user_id):
     url = 'https://api.line.me/v2/bot/message/push'
     payload = json.dumps({
@@ -363,8 +410,31 @@ def main():
         print('ERROR: LINE_CHANNEL_TOKEN or LINE_USER_ID not set in environment')
         return 1
 
+    # Load previous snapshot BEFORE overwriting
+    prev = load_previous()
+    prev_top = prev['top'] if prev else None
+    prev_date = prev['date'] if prev else None
+
+    # Save today's snapshot (will be committed back to repo by workflow)
+    save_history(top, today_str)
+
     status, body = send_line(msg, token, uid)
-    print(f'\nLINE push status={status} body={body[:150]}')
+    print(f'\nLINE push #1 (daily) status={status} body={body[:150]}')
+
+    # Send diff notification if there are changes
+    if prev_top is not None and prev_date != today_str:
+        added, removed = compute_diff(prev_top, top)
+        if added or removed:
+            diff_msg = format_diff_message(added, removed, today_str, prev_date)
+            print('\n--- Diff message ---')
+            print(diff_msg)
+            status2, body2 = send_line(diff_msg, token, uid)
+            print(f'\nLINE push #2 (diff) status={status2} body={body2[:150]}')
+        else:
+            print('\nNo changes vs ' + prev_date + ', skip diff notification')
+    else:
+        print('\nNo previous snapshot or same date, skip diff notification')
+
     return 0 if status == 200 else 1
 
 if __name__ == '__main__':
