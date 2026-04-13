@@ -21,6 +21,37 @@ sys.stdout.reconfigure(encoding='utf-8')
 CACHE_DIR = '/tmp/bulk_cache_acc'
 HISTORY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'history')
 LATEST = os.path.join(HISTORY_DIR, 'accumulation_latest.json')
+
+
+def load_top20_history():
+    """讀 history/radar_YYYYMMDD.json → {date: set_of_top20_codes}."""
+    out = {}
+    if not os.path.exists(HISTORY_DIR):
+        return out
+    for fn in sorted(os.listdir(HISTORY_DIR)):
+        if not (fn.startswith('radar_') and fn.endswith('.json')):
+            continue
+        try:
+            with open(os.path.join(HISTORY_DIR, fn), encoding='utf-8') as f:
+                snap = json.load(f)
+            d = snap.get('date')
+            codes = {r['code'] for r in snap.get('top_20', [])}
+            if d:
+                out[d] = codes
+        except Exception:
+            pass
+    return out
+
+
+def compute_streak(code, today_date, history):
+    streak = 1
+    dates_before = sorted(d for d in history.keys() if d < today_date)
+    for d in reversed(dates_before):
+        if code in history[d]:
+            streak += 1
+        else:
+            break
+    return streak
 FETCH_DAYS = 100  # need 60+ trading days
 SKIP_DATE = '20260223'
 
@@ -356,6 +387,16 @@ def run_full_screen(full_data):
     )
     for i, r in enumerate(today_results, 1):
         r['today_rank'] = i
+
+    # Compute streak using history snapshots
+    history = load_top20_history()
+    top20_codes = {r['code'] for r in today_results[:TOP_N]}
+    history[today] = top20_codes
+    for r in today_results[:TOP_N]:
+        r['streak'] = compute_streak(r['code'], today, history)
+    for r in today_results[TOP_N:]:
+        r['streak'] = 0
+
     return today_results, today
 
 
@@ -390,14 +431,16 @@ def _line_stock_block(r):
     new_in = r['rank_1d_ago'] is None
     badge = ''
     if new_in:
-        badge = '  🚀新進榜'
+        badge = ' 🚀新進榜'
     elif sprint:
-        badge = '  🚀衝刺'
+        badge = ' 🚀衝刺'
     rank = r['today_rank']
+    streak = r.get('streak', 1)
     return (
-        f'  #{rank:<2} {r["code"]} {r["name"]}{badge}\n'
-        f'     🎯蟄伏{r["score"]}分  📈動能{r["momentum"]:+d}  💰{r["close"]}元\n'
-        f'     📉離底+{r["low_zone_pct"]}%  📊量{r["vol_ratio_3d"]}  ⬆️昨{_arrow_tag(r)}'
+        f'#{rank:<2} {r["code"]} {r["name"]}{badge}\n'
+        f'   蟄伏{r["score"]}  動能{r["momentum"]:+d}  '
+        f'連{streak}天  昨{_arrow_tag(r)}\n'
+        f'   {r["close"]}元  離底+{r["low_zone_pct"]}%  量{r["vol_ratio_3d"]}'
     )
 
 
@@ -406,16 +449,17 @@ def _dc_stock_block(r):
     new_in = r['rank_1d_ago'] is None
     badge = ''
     if new_in:
-        badge = ' · ✨ **新進榜**'
+        badge = ' · 🚀 **新進榜**'
     elif sprint:
         badge = ' · 🚀 **衝刺**'
     rank = r['today_rank']
+    streak = r.get('streak', 1)
     return (
         f'### `#{rank}` {r["code"]} {r["name"]}{badge}\n'
-        f'> 🎯 蟄伏 `{r["score"]}` · 📈 動能 `{r["momentum"]:+d}` · '
-        f'💰 `{r["close"]}元`\n'
-        f'> 📉 離底 `+{r["low_zone_pct"]}%` · 📊 量 `{r["vol_ratio_3d"]}` · '
-        f'⬆️ 昨 `{_arrow_tag(r)}`'
+        f'> 蟄伏 `{r["score"]}` · 動能 `{r["momentum"]:+d}` · '
+        f'連 `{streak}天` · 昨 `{_arrow_tag(r)}`\n'
+        f'> `{r["close"]}元` · 離底 `+{r["low_zone_pct"]}%` · '
+        f'量 `{r["vol_ratio_3d"]}`'
     )
 
 
@@ -425,29 +469,27 @@ def format_for_line(results, today):
     date_str, wd = _date_header(today)
 
     p1 = [
-        '🎯 蟄伏雷達 Top 20 [備援]',
-        f'📅 {date_str} (週{wd})',
-        f'全市場 {len(results)} 檔符合蟄伏條件',
+        '蟄伏雷達 Top 20 [備援]',
+        f'{date_str} (週{wd}) · 全 {len(results)} 檔',
         '',
-        '『量縮整理、尚未啟動的底部股』',
+        '量縮整理、尚未啟動的底部股',
         '歷史驗證 55% 會爆發',
-        '平均 60 日最大漲幅 +29.5%',
+        '60日平均最大漲幅 +29.5%',
         '',
         '━━━━━━━━━━━━━━',
-        '💡 數字怎麼看',
+        '指標說明',
         '━━━━━━━━━━━━━━',
-        '🎯 蟄伏分 = 符合蟄伏的強度 (滿分17)',
-        '📈 動能 = 排名上升速度',
-        '         (越高代表剛被發現)',
-        '💰 收盤價',
-        '📉 離底 = 距60日最低價%',
-        '📊 量  = 3日量÷20日量 (<1 量縮)',
-        '⬆️ 昨 = 昨日排名變化',
+        '蟄伏分 (滿17) 越高越符合',
+        '動能 排名上升速度',
+        '連N天 連續在 Top 20 天數',
+        '昨 昨日排名變化',
+        '離底 距60日最低價%',
+        '量 3日量÷20日量 (<1=量縮)',
         '',
-        '🚀 衝刺型 (新進榜/快速上升)',
+        '🚀衝刺型 (新進榜/快速上升)',
         '',
         '━━━━━━━━━━━━━━',
-        '📊 Top 1-10',
+        'Top 1-10',
         '━━━━━━━━━━━━━━',
         '',
     ]
@@ -457,8 +499,8 @@ def format_for_line(results, today):
     msg1 = '\n'.join(p1)
 
     p2 = [
-        f'🎯 蟄伏雷達 Top 11-20 (續) [備援]',
-        f'📅 {date_str}',
+        f'蟄伏雷達 Top 11-20 (續) [備援]',
+        f'{date_str}',
         '',
         '━━━━━━━━━━━━━━',
         '',
@@ -468,11 +510,11 @@ def format_for_line(results, today):
         p2.append('')
     p2.extend([
         '━━━━━━━━━━━━━━',
-        f'本次 🚀 衝刺型 {sprint_n} 檔',
+        f'本次 🚀衝刺型 {sprint_n} 檔',
         '━━━━━━━━━━━━━━',
         '',
-        '💡 動能越高 = 剛被發現的好機會',
-        '   歷史 55% 會爆發',
+        '動能越高=剛被發現, 歷史 55% 會爆發',
+        '連天數高=穩定蟄伏候選',
         '',
         '⚠️ 此為 GitHub Actions 備援訊息',
     ])
@@ -486,28 +528,28 @@ def format_for_discord(results, today):
     date_str, wd = _date_header(today)
 
     p1 = [
-        '# 🎯 蟄伏雷達 Top 20 `[備援]`',
-        f'**📅 {date_str} (週{wd})** · 全市場 `{len(results)}` 檔',
+        '# 蟄伏雷達 Top 20 `[備援]`',
+        f'**{date_str} (週{wd})** · 全市場 `{len(results)}` 檔',
         '',
-        '> 『量縮整理、尚未啟動的底部股』',
+        '> 量縮整理、尚未啟動的底部股',
         '> 歷史驗證 **55%** 爆發命中率',
-        '> 平均 60 日最大漲幅 **+29.5%**',
+        '> 60 日平均最大漲幅 **+29.5%**',
         '',
         '━━━━━━━━━━━━━━━',
         '',
-        '## 💡 指標說明',
-        '> 🎯 **蟄伏分** (滿分 17) · 越高越符合蟄伏條件',
-        '> 📈 **動能** · 排名上升速度 · 越高越剛被發現',
-        '> 💰 **收盤價**',
-        '> 📉 **離底** · 距 60 日最低價百分比',
-        '> 📊 **量比** · 3日量÷20日量 · `<1` 代表量縮',
-        '> ⬆️ **昨** · 昨日排名變化',
+        '## 指標說明',
+        '> **蟄伏分** (滿 17) · 越高越符合',
+        '> **動能** · 排名上升速度',
+        '> **連N天** · 連續在 Top 20 天數',
+        '> **昨** · 昨日排名變化',
+        '> **離底** · 距 60 日最低價%',
+        '> **量** · 3日量÷20日量 · `<1`=量縮',
         '',
-        '> 🚀 **衝刺型** (新進榜 或 快速上升)',
+        '> 🚀 衝刺型 (新進榜/快速上升)',
         '',
         '━━━━━━━━━━━━━━━',
         '',
-        '## 📊 Top 1-10',
+        '## Top 1-10',
         '',
     ]
     for r in top[:10]:
@@ -516,7 +558,7 @@ def format_for_discord(results, today):
     msg1 = '\n'.join(p1)
 
     p2 = [
-        f'## 📊 Top 11-20 (續) · {date_str}',
+        f'## Top 11-20 (續) · {date_str}',
         '',
     ]
     for r in top[10:]:
@@ -527,8 +569,8 @@ def format_for_discord(results, today):
         '',
         f'### 🚀 本次衝刺型 `{sprint_n}` 檔',
         '',
-        '> 💡 **動能越高 = 剛被發現 = 最有爆發潛力**',
-        '> 歷史 **55%** 命中率',
+        '> 動能越高 = 剛被發現, 歷史 **55%** 會爆發',
+        '> 連天數高 = 穩定蟄伏候選',
         '',
         '> ⚠️ 此為 GitHub Actions 備援訊息',
     ])
@@ -598,6 +640,11 @@ def save_history(results, today):
         'total_candidates': len(results),
         'top_20': results[:TOP_N],
     }
+    # 保存 radar_YYYYMMDD.json 供連續天數計算
+    dated = os.path.join(HISTORY_DIR, f'radar_{today}.json')
+    with open(dated, 'w', encoding='utf-8') as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    # 保存 latest alias
     with open(LATEST, 'w', encoding='utf-8') as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
 
