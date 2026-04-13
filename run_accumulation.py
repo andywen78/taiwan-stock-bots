@@ -359,51 +359,181 @@ def run_full_screen(full_data):
     return today_results, today
 
 
-# ── Message format (Top 20 with 🚀 markers) ──
-def _fmt_arrow(r):
+# ── Message format ──
+WEEKDAY_CH = ['一', '二', '三', '四', '五', '六', '日']
+
+
+def _arrow_tag(r):
     r1 = r['rank_1d_ago']
     if r1 is None:
-        return '[新]'
+        return '首次'
     d = r1 - r['today_rank']
-    return f'↑{d}' if d > 0 else (f'↓{-d}' if d < 0 else '=')
+    if d > 0:
+        return f'↑{d}位'
+    if d < 0:
+        return f'↓{-d}位'
+    return '持平'
 
 
 def _is_sprinter(r):
     return r['momentum'] >= 4 or r['rank_1d_ago'] is None
 
 
-def format_message(results, today):
-    top = results[:TOP_N]
+def _date_header(today):
     date_str = f'{today[:4]}-{today[4:6]}-{today[6:8]}'
-    lines = [
-        f'🎯 蟄伏雷達 Top {TOP_N} [備援]',
-        date_str,
+    wd = WEEKDAY_CH[datetime.strptime(today, '%Y%m%d').weekday()]
+    return date_str, wd
+
+
+def _line_stock_block(r):
+    sprint = _is_sprinter(r)
+    new_in = r['rank_1d_ago'] is None
+    badge = ''
+    if new_in:
+        badge = '  🚀新進榜'
+    elif sprint:
+        badge = '  🚀衝刺'
+    rank = r['today_rank']
+    return (
+        f'  #{rank:<2} {r["code"]} {r["name"]}{badge}\n'
+        f'     🎯蟄伏{r["score"]}分  📈動能{r["momentum"]:+d}  💰{r["close"]}元\n'
+        f'     📉離底+{r["low_zone_pct"]}%  📊量{r["vol_ratio_3d"]}  ⬆️昨{_arrow_tag(r)}'
+    )
+
+
+def _dc_stock_block(r):
+    sprint = _is_sprinter(r)
+    new_in = r['rank_1d_ago'] is None
+    badge = ''
+    if new_in:
+        badge = ' · ✨ **新進榜**'
+    elif sprint:
+        badge = ' · 🚀 **衝刺**'
+    rank = r['today_rank']
+    return (
+        f'### `#{rank}` {r["code"]} {r["name"]}{badge}\n'
+        f'> 🎯 蟄伏 `{r["score"]}` · 📈 動能 `{r["momentum"]:+d}` · '
+        f'💰 `{r["close"]}元`\n'
+        f'> 📉 離底 `+{r["low_zone_pct"]}%` · 📊 量 `{r["vol_ratio_3d"]}` · '
+        f'⬆️ 昨 `{_arrow_tag(r)}`'
+    )
+
+
+def format_for_line(results, today):
+    top = results[:TOP_N]
+    sprint_n = sum(1 for r in top if _is_sprinter(r))
+    date_str, wd = _date_header(today)
+
+    p1 = [
+        '🎯 蟄伏雷達 Top 20 [備援]',
+        f'📅 {date_str} (週{wd})',
+        f'全市場 {len(results)} 檔符合蟄伏條件',
         '',
-        '量縮價穩・MA20水平・未啟動',
-        '專攻爆發前的底部盤整股',
+        '『量縮整理、尚未啟動的底部股』',
+        '歷史驗證 55% 會爆發',
+        '平均 60 日最大漲幅 +29.5%',
         '',
         '━━━━━━━━━━━━━━',
-        f'📊 Top {TOP_N} 候選 (全 {len(results)} 檔)',
-        '🚀=衝刺型',
+        '💡 數字怎麼看',
+        '━━━━━━━━━━━━━━',
+        '🎯 蟄伏分 = 符合蟄伏的強度 (滿分17)',
+        '📈 動能 = 排名上升速度',
+        '         (越高代表剛被發現)',
+        '💰 收盤價',
+        '📉 離底 = 距60日最低價%',
+        '📊 量  = 3日量÷20日量 (<1 量縮)',
+        '⬆️ 昨 = 昨日排名變化',
+        '',
+        '🚀 衝刺型 (新進榜/快速上升)',
+        '',
+        '━━━━━━━━━━━━━━',
+        '📊 Top 1-10',
         '━━━━━━━━━━━━━━',
         '',
     ]
-    sprinter_count = sum(1 for r in top if _is_sprinter(r))
-    for r in top:
-        prefix = '🚀  ' if _is_sprinter(r) else '    '
-        tag = _fmt_arrow(r)
-        lines.append(f'{prefix}{r["today_rank"]:2d}. {r["code"]} {r["name"]} '
-                     f's={r["score"]} m={r["momentum"]:+d}')
-        lines.append(f'     收{r["close"]} 距低{r["low_zone_pct"]}% '
-                     f'量比{r["vol_ratio_3d"]} 昨{tag}')
-    lines.append('')
-    lines.append('━━━━━━━━━━━━━━')
-    lines.append(f'Top 20 中 🚀 衝刺型 {sprinter_count} 檔')
-    lines.append('💡 歷史 55% 爆發命中率')
-    lines.append('   平均60日最大漲幅 +29.5%')
-    lines.append('')
-    lines.append('⚠️ 此為 GitHub Actions 備援訊息')
-    return '\n'.join(lines)
+    for r in top[:10]:
+        p1.append(_line_stock_block(r))
+        p1.append('')
+    msg1 = '\n'.join(p1)
+
+    p2 = [
+        f'🎯 蟄伏雷達 Top 11-20 (續) [備援]',
+        f'📅 {date_str}',
+        '',
+        '━━━━━━━━━━━━━━',
+        '',
+    ]
+    for r in top[10:]:
+        p2.append(_line_stock_block(r))
+        p2.append('')
+    p2.extend([
+        '━━━━━━━━━━━━━━',
+        f'本次 🚀 衝刺型 {sprint_n} 檔',
+        '━━━━━━━━━━━━━━',
+        '',
+        '💡 動能越高 = 剛被發現的好機會',
+        '   歷史 55% 會爆發',
+        '',
+        '⚠️ 此為 GitHub Actions 備援訊息',
+    ])
+    msg2 = '\n'.join(p2)
+    return [msg1, msg2]
+
+
+def format_for_discord(results, today):
+    top = results[:TOP_N]
+    sprint_n = sum(1 for r in top if _is_sprinter(r))
+    date_str, wd = _date_header(today)
+
+    p1 = [
+        '# 🎯 蟄伏雷達 Top 20 `[備援]`',
+        f'**📅 {date_str} (週{wd})** · 全市場 `{len(results)}` 檔',
+        '',
+        '> 『量縮整理、尚未啟動的底部股』',
+        '> 歷史驗證 **55%** 爆發命中率',
+        '> 平均 60 日最大漲幅 **+29.5%**',
+        '',
+        '━━━━━━━━━━━━━━━',
+        '',
+        '## 💡 指標說明',
+        '> 🎯 **蟄伏分** (滿分 17) · 越高越符合蟄伏條件',
+        '> 📈 **動能** · 排名上升速度 · 越高越剛被發現',
+        '> 💰 **收盤價**',
+        '> 📉 **離底** · 距 60 日最低價百分比',
+        '> 📊 **量比** · 3日量÷20日量 · `<1` 代表量縮',
+        '> ⬆️ **昨** · 昨日排名變化',
+        '',
+        '> 🚀 **衝刺型** (新進榜 或 快速上升)',
+        '',
+        '━━━━━━━━━━━━━━━',
+        '',
+        '## 📊 Top 1-10',
+        '',
+    ]
+    for r in top[:10]:
+        p1.append(_dc_stock_block(r))
+        p1.append('')
+    msg1 = '\n'.join(p1)
+
+    p2 = [
+        f'## 📊 Top 11-20 (續) · {date_str}',
+        '',
+    ]
+    for r in top[10:]:
+        p2.append(_dc_stock_block(r))
+        p2.append('')
+    p2.extend([
+        '━━━━━━━━━━━━━━━',
+        '',
+        f'### 🚀 本次衝刺型 `{sprint_n}` 檔',
+        '',
+        '> 💡 **動能越高 = 剛被發現 = 最有爆發潛力**',
+        '> 歷史 **55%** 命中率',
+        '',
+        '> ⚠️ 此為 GitHub Actions 備援訊息',
+    ])
+    msg2 = '\n'.join(p2)
+    return [msg1, msg2]
 
 
 # ── Push ──
@@ -429,20 +559,36 @@ def send_discord(text):
     webhook = os.environ.get('DISCORD_WEBHOOK_STOCK', '')
     if not webhook:
         return False
-    payload = json.dumps({
-        'content': text[:1990] if len(text) <= 1990 else text[:1990],
-        'username': '蟄伏雷達 Bot [備援]',
-    }).encode('utf-8')
-    req = urllib.request.Request(
-        webhook, data=payload, method='POST',
-        headers={'Content-Type': 'application/json'}
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
-            return r.status == 204
-    except Exception as e:
-        print(f'Discord push failed: {e}')
-        return False
+    # Split into chunks <=1990 chars at newlines
+    chunks = []
+    remaining = text
+    while len(remaining) > 1990:
+        split_at = remaining.rfind('\n', int(1990 * 0.6), 1990)
+        if split_at == -1:
+            split_at = 1990
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip('\n')
+    if remaining:
+        chunks.append(remaining)
+
+    for chunk in chunks:
+        payload = json.dumps({
+            'content': chunk,
+            'username': '蟄伏雷達 Bot [備援]',
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            webhook, data=payload, method='POST',
+            headers={'Content-Type': 'application/json'}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+                if r.status != 204:
+                    print(f'Discord push unexpected status: {r.status}')
+            time.sleep(0.4)
+        except Exception as e:
+            print(f'Discord push failed: {e}')
+            return False
+    return True
 
 
 # ── History snapshot ──
@@ -473,24 +619,34 @@ def main():
 
     save_history(results, today)
 
-    msg = format_message(results, today)
-    print('\n--- Message ---')
-    print(msg)
-    print(f'\nMessage length: {len(msg)} chars')
+    line_msgs = format_for_line(results, today)
+    discord_msgs = format_for_discord(results, today)
+
+    for i, m in enumerate(line_msgs, 1):
+        print(f'\n--- LINE msg {i}/{len(line_msgs)} ({len(m)} chars) ---')
+        print(m)
 
     token = os.environ.get('LINE_CHANNEL_TOKEN', '')
     user_id = os.environ.get('LINE_USER_ID', '')
+
+    line_ok = True
     if not token or not user_id:
-        print('ERROR: LINE_CHANNEL_TOKEN or LINE_USER_ID not set')
-        send_discord(msg)
-        return 1
+        print('ERROR: LINE_CHANNEL_TOKEN or LINE_USER_ID not set, skip LINE')
+        line_ok = False
+    else:
+        for i, m in enumerate(line_msgs, 1):
+            status, body = send_line(m, token, user_id)
+            print(f'LINE msg {i}/{len(line_msgs)}: {status} {body[:120]}')
+            if status != 200:
+                line_ok = False
+            time.sleep(0.6)
 
-    status, body = send_line(msg, token, user_id)
-    print(f'LINE status: {status} body: {body[:150]}')
+    for i, m in enumerate(discord_msgs, 1):
+        print(f'Discord msg {i}/{len(discord_msgs)} ({len(m)} chars)')
+        send_discord(m)
+        time.sleep(0.6)
 
-    send_discord(msg)
-
-    return 0 if status == 200 else 1
+    return 0 if line_ok else 1
 
 
 if __name__ == '__main__':
