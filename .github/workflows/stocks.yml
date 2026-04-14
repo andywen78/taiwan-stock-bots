@@ -14,8 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run stock analysis and push LINE
+      - name: Run stock analysis and push LINE + Discord
         env:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          DISCORD_WEBHOOK_STOCK_HOLDINGS: ${{ secrets.DISCORD_WEBHOOK_STOCK_HOLDINGS }}
         run: python3 stock_analysis.py

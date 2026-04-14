@@ -405,35 +405,12 @@ def main():
     print('\n--- LINE message ---')
     print(msg)
 
-    token, uid = load_line_config()
-    if not token or not uid:
-        print('ERROR: LINE_CHANNEL_TOKEN or LINE_USER_ID not set in environment')
-        return 1
-
-    # Load previous snapshot BEFORE overwriting
-    prev = load_previous()
-    prev_top = prev['top'] if prev else None
-    prev_date = prev['date'] if prev else None
-
-    # Save today's snapshot (will be committed back to repo by workflow)
+    # Push disabled in backup version.
+    # 對應本機版的 Phase 1 篩選已停推（本機只在 Phase 3 AI 深度分析後才推播 LINE/Discord），
+    # 備援版沒有 AI 分析能力，故不做任何 LINE/Discord 推播，
+    # 只保留 history snapshot commit 讓 git 記錄每日清單供事後追蹤。
     save_history(top, today_str)
-
-    status, body = send_line(msg, token, uid)
-    print(f'\nLINE push #1 (daily) status={status} body={body[:150]}')
-
-    # Send diff notification if there are changes
-    if prev_top is not None and prev_date != today_str:
-        added, removed = compute_diff(prev_top, top)
-        added, removed = compute_diff(prev_top, top)
-        diff_msg = format_diff_message(added, removed, today_str, prev_date)
-        print('\n--- Diff message ---')
-        print(diff_msg)
-        status2, body2 = send_line(diff_msg, token, uid)
-        print(f'\nLINE push #2 (diff) status={status2} body={body2[:150]}')
-    else:
-        print('\nNo previous snapshot or same date, skip diff notification')
-
-    return 0 if status == 200 else 1
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())

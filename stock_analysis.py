@@ -258,6 +258,41 @@ def send_line(text):
         print(f'LINE error: {e}')
         return False
 
+def send_discord(text):
+    webhook = os.environ.get('DISCORD_WEBHOOK_STOCK_HOLDINGS', '')
+    if not webhook:
+        print('DISCORD_WEBHOOK_STOCK_HOLDINGS not set, skip Discord')
+        return False
+    import time as _time
+    chunks = []
+    remaining = text
+    while len(remaining) > 1990:
+        split_at = remaining.rfind('\n', int(1990 * 0.6), 1990)
+        if split_at == -1:
+            split_at = 1990
+        chunks.append(remaining[:split_at])
+        remaining = remaining[split_at:].lstrip('\n')
+    if remaining:
+        chunks.append(remaining)
+    for chunk in chunks:
+        payload = json.dumps({
+            'content': chunk,
+            'username': '持股分析 Bot [備援]',
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            webhook, data=payload, method='POST',
+            headers={'Content-Type': 'application/json'},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+                if r.status not in (200, 204):
+                    print(f'Discord push unexpected status: {r.status}')
+            _time.sleep(0.4)
+        except Exception as e:
+            print(f'Discord push failed: {e}')
+            return False
+    return True
+
 def main():
     now = today_tw()
     yyyymmdd = now.strftime('%Y%m%d')
@@ -312,6 +347,7 @@ def main():
     print('---------------\n')
 
     ok = send_line(msg)
+    send_discord(msg)
     return 0 if ok else 1
 
 if __name__ == '__main__':

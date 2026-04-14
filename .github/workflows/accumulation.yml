@@ -17,11 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Run accumulation radar and push LINE
+      - name: Run accumulation radar and push Discord
         env:
-          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_BULLISH_TOKEN }}
-          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          DISCORD_WEBHOOK_STOCK: ${{ secrets.DISCORD_WEBHOOK_STOCK }}
+          DISCORD_WEBHOOK_ACCUMULATION: ${{ secrets.DISCORD_WEBHOOK_ACCUMULATION }}
         run: python3 run_accumulation.py
       # Fallback only — local Windows Task Scheduler runs the full version
       # with watchlist highlighting. This fallback activates when laptop is off.

@@ -598,7 +598,7 @@ def send_line(text, token, user_id):
 
 
 def send_discord(text):
-    webhook = os.environ.get('DISCORD_WEBHOOK_STOCK', '')
+    webhook = os.environ.get('DISCORD_WEBHOOK_ACCUMULATION', '')
     if not webhook:
         return False
     # Split into chunks <=1990 chars at newlines
@@ -673,27 +673,13 @@ def main():
         print(f'\n--- LINE msg {i}/{len(line_msgs)} ({len(m)} chars) ---')
         print(m)
 
-    token = os.environ.get('LINE_CHANNEL_TOKEN', '')
-    user_id = os.environ.get('LINE_USER_ID', '')
-
-    line_ok = True
-    if not token or not user_id:
-        print('ERROR: LINE_CHANNEL_TOKEN or LINE_USER_ID not set, skip LINE')
-        line_ok = False
-    else:
-        for i, m in enumerate(line_msgs, 1):
-            status, body = send_line(m, token, user_id)
-            print(f'LINE msg {i}/{len(line_msgs)}: {status} {body[:120]}')
-            if status != 200:
-                line_ok = False
-            time.sleep(0.6)
-
+    # LINE push disabled — 蟄伏雷達改為只推 Discord (DISCORD_WEBHOOK_ACCUMULATION)
     for i, m in enumerate(discord_msgs, 1):
         print(f'Discord msg {i}/{len(discord_msgs)} ({len(m)} chars)')
         send_discord(m)
         time.sleep(0.6)
 
-    return 0 if line_ok else 1
+    return 0
 
 
 if __name__ == '__main__':
